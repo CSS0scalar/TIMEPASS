@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shadow Fighter: Duel of Legends</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Bebas+Neue&family=Orbitron:wght@700;900&family=Noto+Sans+JP:wght@900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            background-color: #030106;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            color: #fff;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Glassmorphism Top HUD */
+        .hud-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            pointer-events: none;
+            z-index: 25;
+            padding: 18px 30px;
+        }
+        .interactive-btn {
+            pointer-events: auto;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .interactive-btn:hover {
+            transform: scale(1.08) translateY(-2px);
+        }
+        .interactive-btn:active {
+            transform: scale(0.96) translateY(1px);
+        }
+
+        .bar-shell {
+            background: rgba(12, 12, 18, 0.85);
+            border: 2px solid rgba(255, 255, 255, 0.18);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.9);
+        }
+        .bar-trail {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            transition: width 0.4s ease-out;
+            background: #ffffff;
+            opacity: 0.6;
+        }
+        .bar-active {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            transition: width 0.08s linear;
+        }
+
+        /* Aura Max Glowing FX */
+        .meter-glow-p1 {
+            box-shadow: 0 0 25px #06b6d4, 0 0 50px #0891b2;
+            animation: pulseAuraP1 0.7s infinite alternate ease-in-out;
+        }
+        .meter-glow-p2 {
+            box-shadow: 0 0 25px #ef4444, 0 0 50px #b91c1c;
+            animation: pulseAuraP2 0.7s infinite alternate ease-in-out;
+        }
+        @keyframes pulseAuraP1 {
+            0% { filter: drop-shadow(0 0 5px #22d3ee) brightness(1); }
+            100% { filter: drop-shadow(0 0 20px #06b6d4) brightness(1.6); }
+        }
+        @keyframes pulseAuraP2 {
+            0% { filter: drop-shadow(0 0 5px #f87171) brightness(1); }
+            100% { filter: drop-shadow(0 0 20px #ef4444) brightness(1.6); }
+        }
+
+        /* Combo Counter */
+        .combo-badge {
+            font-family: 'Bebas Neue', sans-serif;
+            text-shadow: 0 0 15px currentColor, 4px 4px 0 #000;
+            transition: transform 0.12s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+            opacity: 0;
+            transform: scale(0.7);
+        }
+        .combo-badge.show {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        /* Custom Restart Button Styling */
+        .btn-restart-top {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.85), rgba(168, 85, 247, 0.85));
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.6), inset 0 0 8px rgba(255, 255, 255, 0.4);
+            letter-spacing: 2px;
+            font-family: 'Orbitron', sans-serif;
+        }
+        .btn-restart-top:hover {
+            box-shadow: 0 0 35px rgba(239, 68, 68, 0.9), inset 0 0 14px rgba(255, 255, 255, 0.8);
+        }
+
+        /* Victory Modal */
+        #gameover-modal {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(0, 0, 0, 0.85) 0%, rgba(5, 1, 10, 0.97) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease-out;
+            backdrop-filter: blur(8px);
+        }
+        #gameover-modal.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+<div id="game-container">
+    <!-- Canvas for 2D Rendering -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Top UI HUD -->
+    <div class="hud-overlay flex flex-col justify-between h-full pointer-events-none">
+        <div class="flex items-center justify-between w-full">
+            
+            <!-- NAMAN HUD (Player 1) -->
+            <div class="w-5/12 flex flex-col items-start space-y-1">
+                <div class="flex items-center space-x-3">
+                    <span class="text-3xl font-black text-cyan-400 drop-shadow-[0_0_12px_#06b6d4] tracking-widest font-['Cinzel']">NAMAN</span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/50 text-cyan-300">P1 • BUSTER</span>
+                </div>
+                <!-- HP Bar -->
+                <div class="bar-shell w-full h-8">
+                    <div id="p1-hp-trail" class="bar-trail bg-cyan-200" style="width: 100%;"></div>
+                    <div id="p1-hp" class="bar-active bg-gradient-to-r from-cyan-600 via-teal-400 to-cyan-300" style="width: 100%;"></div>
+                </div>
+                <!-- SP Energy Bar -->
+                <div class="w-full flex items-center space-x-2 pt-0.5">
+                    <span class="text-[10px] text-cyan-300 font-bold tracking-wider">SP</span>
+                    <div class="bar-shell flex-1 h-3.5 bg-black/60">
+                        <div id="p1-sp" class="bar-active bg-gradient-to-r from-blue-600 to-cyan-400" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <!-- Combo Streak -->
+                <div id="p1-combo-box" class="combo-badge text-cyan-400 text-3xl font-black">
+                    <span id="p1-combo-count">0</span> <span class="text-xl text-white">HITS!</span>
+                </div>
+            </div>
+
+            <!-- CENTER TIMER & RESTART TOP BAR -->
+            <div class="flex flex-col items-center justify-center px-4">
+                <div class="flex items-center space-x-2 mb-2">
+                    <button id="btn-restart-hud" class="interactive-btn btn-restart-top text-xs font-black uppercase px-4 py-1.5 rounded-full text-white flex items-center space-x-1.5" title="Restart Match (Key: R)">
+                        <svg class="w-3.5 h-3.5 fill-current animate-spin-reverse" viewBox="0 0 24 24">
+                            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0020 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                        </svg>
+                        <span>RESTART [R]</span>
+                    </button>
+                    <button id="btn-mute" class="interactive-btn bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-full p-1.5 text-xs" title="Toggle Sound">
+                        🔊
+                    </button>
+                </div>
+                <!-- Match Timer -->
+                <div class="relative">
+                    <div id="timer-box" class="w-20 h-16 rounded-xl bg-neutral-950/90 border-2 border-white/30 flex items-center justify-center shadow-[0_0_25px_rgba(0,0,0,0.8)]">
+                        <span id="timer-text" class="text-4xl font-extrabold text-white tracking-tighter font-['Orbitron']">99</span>
+                    </div>
+                </div>
+                <div class="text-[10px] text-white/50 tracking-widest mt-1 uppercase">ROUND 1</div>
+            </div>
+
+            <!-- SHIVAM HUD (Player 2) -->
+            <div class="w-5/12 flex flex-col items-end space-y-1">
+                <div class="flex items-center space-x-3">
+                    <span class="text-xs px-2 py-0.5 rounded bg-rose-950/80 border border-rose-500/50 text-rose-300">P2 • GORILLA DUAL</span>
+                    <span class="text-3xl font-black text-rose-500 drop-shadow-[0_0_12px_#ef4444] tracking-widest font-['Cinzel']">SHIVAM</span>
+                </div>
+                <!-- HP Bar -->
+                <div class="bar-shell w-full h-8">
+                    <div id="p2-hp-trail" class="bar-trail bg-rose-200 right-0" style="width: 100%;"></div>
+                    <div id="p2-hp" class="bar-active bg-gradient-to-l from-rose-600 via-red-500 to-amber-400 right-0" style="width: 100%;"></div>
+                </div>
+                <!-- SP Energy Bar -->
+                <div class="w-full flex items-center space-x-2 pt-0.5 justify-end">
+                    <div class="bar-shell flex-1 h-3.5 bg-black/60">
+                        <div id="p2-sp" class="bar-active bg-gradient-to-l from-red-600 to-amber-500 right-0" style="width: 0%;"></div>
+                    </div>
+                    <span class="text-[10px] text-rose-400 font-bold tracking-wider">SP</span>
+                </div>
+                <!-- Combo Streak -->
+                <div id="p2-combo-box" class="combo-badge text-rose-500 text-3xl font-black">
+                    <span id="p2-combo-count">0</span> <span class="text-xl text-white">HITS!</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Controls Guide Footer -->
+        <div class="flex justify-between items-end pb-3 text-xs text-white/60 tracking-wider font-mono">
+            <div class="bg-black/60 p-2.5 rounded-lg border border-cyan-500/30 backdrop-blur-sm">
+                <span class="text-cyan-400 font-bold">NAMAN (P1):</span> [A/D] Walk • [W] Jump • [S] Block • [Shift] Dash • [F] Slash • <span class="text-amber-400 font-bold">[G] Tenchi Slash (100 SP)</span>
+            </div>
+            <div class="text-center font-bold text-white/40 tracking-widest text-[11px]">
+                SHADOW FIGHTER: DUEL OF LEGENDS
+            </div>
+            <div class="bg-black/60 p-2.5 rounded-lg border border-rose-500/30 backdrop-blur-sm text-right">
+                <span class="text-rose-400 font-bold">SHIVAM (P2):</span> [←/→] Walk • [↑] Jump • [↓] Block • [Numpad0/M] Dash • [L] Slash • <span class="text-amber-400 font-bold">[K] Shadow Roar (100 SP)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over / Victory Modal -->
+    <div id="gameover-modal">
+        <div class="text-center max-w-xl p-8 rounded-2xl bg-neutral-950/90 border-2 border-white/20 shadow-[0_0_100px_rgba(239,68,68,0.5)]">
+            <div id="winner-tag" class="text-sm font-bold tracking-[0.4em] uppercase mb-2 text-white/60">MATCH CONCLUSION</div>
+            <h1 id="winner-title" class="text-6xl font-black mb-4 font-['Cinzel'] tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-rose-500">
+                NAMAN WINS!
+            </h1>
+            <p id="winner-sub" class="text-lg text-white/70 font-mono mb-8">Supreme Sword Mastery Demonstrated</p>
+
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button id="btn-modal-restart" class="interactive-btn px-8 py-3.5 rounded-xl bg-gradient-to-r from-red-600 via-purple-600 to-cyan-500 text-white font-black text-lg tracking-widest uppercase shadow-[0_0_35px_rgba(168,85,247,0.7)] border border-white/40 flex items-center space-x-2">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0020 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                    <span>REMATCH [SPACE]</span>
+                </button>
+            </div>
+            <div class="text-xs text-white/40 mt-4 tracking-widest">PRESS [R] OR [SPACE] TO RESTART INSTANTLY</div>
+        </div>
+    </div>
+</div>
+
+<script>
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.muted = false;
+    }
+    init() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+    toggleMute() {
+        this.muted = !this.muted;
+        return this.muted;
+    }
+    playTone(freq, type = 'sine', duration = 0.1, gainVal = 0.3) {
+        if (this.muted) return;
+        this.init();
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {}
+    }
+    playSlash() {
+        if (this.muted) return;
+        this.init();
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(900, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + 0.14);
+            gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.14);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.15);
+        } catch(e) {}
+    }
+    playHit() {
+        if (this.muted) return;
+        this.init();
+        try {
+            // White noise burst
+            const bufferSize = this.ctx.sampleRate * 0.12;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.12);
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            noise.start();
+            this.playTone(80, 'sine', 0.15, 0.4);
+        } catch(e) {}
+    }
+    playSpecialBeam() {
+        if (this.muted) return;
+        this.init();
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.35);
+        } catch (e) {}
+    }
+    playDash() {
+        if (this.muted) return;
+        this.playTone(320, 'triangle', 0.12, 0.18);
+    }
+    playVictory() {
+        if (this.muted) return;
+        [261.63, 329.63, 392.00, 523.25].forEach((freq, idx) => {
+            setTimeout(() => this.playTone(freq, 'sine', 0.3, 0.3), idx * 120);
+        });
+    }
+}
+const sfx = new SoundEngine();
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const V_WIDTH = 1920;
+const V_HEIGHT = 1080;
+const GROUND_Y = 920;
+const GRAVITY = 1.05;
+
+let masterScale = 1;
+function resizeGame() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const sx = canvas.width / V_WIDTH;
+    const sy = canvas.height / V_HEIGHT;
+    masterScale = Math.max(sx, sy);
+}
+window.addEventListener('resize', resizeGame);
+resizeGame();
+
+// Camera & Cinema Controllers
+let camera = {
+    x: 0, y: 0,
+    zoom: 1,
+    targetZoom: 1,
+    shakeDuration: 0,
+    shakeMagnitude: 0
+};
+
+let hitStopCounter = 0;
+let impactFlashTimer = 0;
+
+function triggerScreenShake(magnitude = 18, duration = 12) {
+    camera.shakeMagnitude = magnitude;
+    camera.shakeDuration = duration;
+}
+function triggerHitStop(frames = 6) {
+    hitStopCounter = Math.max(hitStopCounter, frames);
+}
+function triggerCameraPunch(zoom = 1.25, durationMs = 280) {
+    camera.targetZoom = zoom;
+    setTimeout(() => { camera.targetZoom = 1; }, durationMs);
+}
+
+let cutInState = {
+    active: false,
+    timer: 0,
+    maxTimer: 40,
+    name: '',
+    title: '',
+    color: '#06b6d4',
+    facingRight: true
+};
+
+function triggerAnimeCutIn(fighter, specialName) {
+    cutInState.active = true;
+    cutInState.timer = cutInState.maxTimer;
+    cutInState.name = fighter.name;
+    cutInState.title = specialName;
+    cutInState.color = fighter.primaryColor;
+    cutInState.facingRight = (fighter.facing === 'right');
+    triggerHitStop(cutInState.maxTimer);
+    triggerScreenShake(20, 20);
+    sfx.playSpecialBeam();
+}
+
+// Manga Popup Text ('SLASH!', 'DODON!', 'BAAAM!')
+class MangaFloatText {
+    constructor(x, y, text, color = '#ff0055', scale = 1) {
+        this.x = x + (Math.random() - 0.5) * 40;
+        this.y = y + (Math.random() - 0.5) * 40;
+        this.text = text;
+        this.color = color;
+        this.alpha = 1;
+        this.scale = scale * 1.8;
+        this.targetScale = scale * 1.0;
+        this.rotation = (Math.random() - 0.5) * 0.4;
+        this.vy = -6 - Math.random() * 4;
+        this.vx = (Math.random() - 0.5) * 4;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.25;
+        this.alpha -= 0.024;
+        this.scale += (this.targetScale - this.scale) * 0.2;
+    }
+    draw(c) {
+        c.save();
+        c.translate(this.x, this.y);
+        c.rotate(this.rotation);
+        c.scale(this.scale, this.scale);
+        c.globalAlpha = Math.max(0, this.alpha);
+        c.font = '900 65px "Noto Sans JP", "Impact", sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        
+        // Manga offset black silhouette border
+        c.lineWidth = 12;
+        c.strokeStyle = '#000';
+        c.strokeText(this.text, 0, 0);
+
+        c.fillStyle = this.color;
+        c.shadowColor = this.color;
+        c.shadowBlur = 20;
+        c.fillText(this.text, 0, 0);
+
+        c.fillStyle = '#ffffff';
+        c.shadowBlur = 0;
+        c.fillText(this.text, -2, -2);
+        c.restore();
+    }
+}
+
+// Spark and Hit Blood/Slash Particles
+class CombatParticle {
+    constructor(x, y, color, type = 'spark') {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.type = type;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 20 + 5;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed - 2;
+        this.size = Math.random() * 6 + 3;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.04 + 0.02;
+    }
+    update() {
+        this.vx *= 0.92;
+        this.vy *= 0.92;
+        this.vy += 0.35;
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= this.decay;
+        this.size *= 0.95;
+    }
+    draw(c) {
+        c.save();
+        c.globalAlpha = Math.max(0, this.alpha);
+        if (this.type === 'slash') {
+            c.strokeStyle = '#ffffff';
+            c.lineWidth = 4;
+            c.beginPath();
+            c.moveTo(this.x, this.y);
+            c.lineTo(this.x - this.vx * 3, this.y - this.vy * 3);
+            c.stroke();
+        } else {
+            c.fillStyle = this.color;
+            c.shadowColor = this.color;
+            c.shadowBlur = 15;
+            c.beginPath();
+            c.arc(this.x, this.y, Math.max(1, this.size), 0, Math.PI * 2);
+            c.fill();
+        }
+        c.restore();
+    }
+}
+
+// Falling Sakura Petal with Wind Dynamics
+class SakuraPetal {
+    constructor(initRandom = false) {
+        this.reset(initRandom);
+    }
+    reset(randomY = false) {
+        this.x = Math.random() * (V_WIDTH + 300) - 150;
+        this.y = randomY ? Math.random() * V_HEIGHT : -40;
+        this.size = Math.random() * 9 + 6;
+        this.speedY = Math.random() * 2 + 1.2;
+        this.speedX = Math.random() * 4 + 3;
+        this.angle = Math.random() * Math.PI * 2;
+        this.spin = (Math.random() - 0.5) * 0.07;
+        this.color = `rgba(255, ${Math.floor(170 + Math.random()*55)}, ${Math.floor(190 + Math.random()*55)}, ${0.4 + Math.random()*0.4})`;
+    }
+    update(windBonus = 0) {
+        this.x += this.speedX + windBonus + Math.sin(this.angle) * 1.5;
+        this.y += this.speedY;
+        this.angle += this.spin;
+        if (this.y > V_HEIGHT + 30 || this.x > V_WIDTH + 150) {
+            this.reset();
+        }
+    }
+    draw(c) {
+        c.save();
+        c.translate(this.x, this.y);
+        c.rotate(this.angle);
+        c.fillStyle = this.color;
+        c.beginPath();
+        c.moveTo(0, -this.size / 2);
+        c.bezierCurveTo(this.size / 2, -this.size, this.size, 0, 0, this.size);
+        c.bezierCurveTo(-this.size, 0, -this.size / 2, -this.size, 0, -this.size / 2);
+        c.fill();
+        c.restore();
+    }
+}
+
+// Rising DBZ Flame Aura Particles
+class AuraFlame {
+    constructor(x, y, color) {
+        this.x = x + (Math.random() - 0.5) * 90;
+        this.y = y + Math.random() * 120 - 40;
+        this.color = color;
+        this.size = Math.random() * 24 + 14;
+        this.vy = -(Math.random() * 9 + 6);
+        this.vx = (Math.random() - 0.5) * 3;
+        this.alpha = 0.9;
+        this.decay = Math.random() * 0.05 + 0.03;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.size *= 0.93;
+        this.alpha -= this.decay;
+    }
+    draw(c) {
+        c.save();
+        c.globalAlpha = Math.max(0, this.alpha);
+        c.fillStyle = this.color;
+        c.shadowColor = this.color;
+        c.shadowBlur = 25;
+        c.beginPath();
+        // Sharp flame teardrop
+        c.moveTo(this.x, this.y - this.size * 1.2);
+        c.lineTo(this.x + this.size * 0.6, this.y + this.size * 0.8);
+        c.lineTo(this.x - this.size * 0.6, this.y + this.size * 0.8);
+        c.closePath();
+        c.fill();
+        c.restore();
+    }
+}
+
+// Special Projectile Wave
+class EnergyProjectile {
+    constructor(x, y, vx, color, owner, type = 'beam') {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.color = color;
+        this.owner = owner;
+        this.type = type;
+        this.width = 170;
+        this.height = 80;
+        this.active = true;
+        this.life = 0;
+    }
+    update() {
+        this.x += this.vx;
+        this.life++;
+        if (this.x < -300 || this.x > V_WIDTH + 300) {
+            this.active = false;
+        }
+    }
+    draw(c) {
+        c.save();
+        c.translate(this.x, this.y);
+        if (this.vx < 0) c.scale(-1, 1);
+        
+        c.shadowColor = this.color;
+        c.shadowBlur = 35 + Math.sin(this.life * 0.4) * 15;
+
+        if (this.type === 'crescent') {
+            // Tenchi Soaring Crescent
+            c.fillStyle = '#ffffff';
+            c.beginPath();
+            c.arc(0, 0, 90, -Math.PI * 0.4, Math.PI * 0.4, false);
+            c.arc(25, 0, 80, Math.PI * 0.4, -Math.PI * 0.4, true);
+            c.closePath();
+            c.fill();
+
+            c.lineWidth = 10;
+            c.strokeStyle = this.color;
+            c.stroke();
+        } else {
+            // Beast Shadow Spiral Wave
+            c.fillStyle = '#ffffff';
+            c.beginPath();
+            c.moveTo(60, 0);
+            c.quadraticCurveTo(0, -50, -80, -20);
+            c.quadraticCurveTo(-20, 0, -80, 20);
+            c.quadraticCurveTo(0, 50, 60, 0);
+            c.fill();
+
+            c.lineWidth = 8;
+            c.strokeStyle = this.color;
+            c.stroke();
+        }
+        c.restore();
+    }
+}
+
+class GameBackground {
+    constructor() {
+        this.mistClouds = Array.from({ length: 15 }, () => ({
+            x: Math.random() * V_WIDTH,
+            y: GROUND_Y - Math.random() * 260 - 50,
+            r: Math.random() * 200 + 100,
+            vx: Math.random() * 1.2 + 0.4,
+            alpha: Math.random() * 0.12 + 0.04
+        }));
+    }
+    update() {
+        this.mistClouds.forEach(m => {
+            m.x += m.vx;
+            if (m.x - m.r > V_WIDTH) m.x = -m.r;
+        });
+    }
+    drawTorii(c, x, y, scale = 1) {
+        c.save();
+        c.translate(x, y);
+        c.scale(scale, scale);
+        c.fillStyle = '#060205';
+        // Pillars
+        c.fillRect(-60, -260, 26, 260);
+        c.fillRect(34, -260, 26, 260);
+        // Roof curved beam
+        c.beginPath();
+        c.moveTo(-110, -240);
+        c.quadraticCurveTo(0, -270, 110, -240);
+        c.lineTo(110, -265);
+        c.quadraticCurveTo(0, -295, -110, -265);
+        c.closePath();
+        c.fill();
+        // Lower tie-beam
+        c.fillRect(-85, -210, 170, 18);
+        c.restore();
+    }
+    drawPagoda(c, x, y, scale = 1) {
+        c.save();
+        c.translate(x, y);
+        c.scale(scale, scale);
+        c.fillStyle = '#050204';
+        c.fillRect(-45, -60, 90, 60);
+        let currY = -60;
+        let w = 140;
+        for (let i = 0; i < 5; i++) {
+            c.beginPath();
+            c.moveTo(-w / 2, currY);
+            c.quadraticCurveTo(0, currY - 30, w / 2, currY);
+            c.lineTo(w / 2 - 16, currY - 18);
+            c.lineTo(-w / 2 + 16, currY - 18);
+            c.closePath();
+            c.fill();
+            currY -= 18;
+            w -= 22;
+            c.fillRect(-w / 2 + 8, currY - 35, w - 16, 35);
+            currY -= 35;
+        }
+        // Spire
+        c.fillRect(-4, currY - 60, 8, 60);
+        c.restore();
+    }
+    drawLantern(c, x, y) {
+        c.save();
+        c.translate(x, y);
+        // String
+        c.strokeStyle = '#222';
+        c.lineWidth = 2;
+        c.beginPath(); c.moveTo(0, -30); c.lineTo(0, 0); c.stroke();
+        // Glowing Lantern
+        c.fillStyle = '#ef4444';
+        c.shadowColor = '#f97316';
+        c.shadowBlur = 30;
+        c.beginPath();
+        c.ellipse(0, 15, 14, 20, 0, 0, Math.PI * 2);
+        c.fill();
+        // Core
+        c.fillStyle = '#fef08a';
+        c.shadowBlur = 10;
+        c.beginPath();
+        c.ellipse(0, 15, 6, 10, 0, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+    }
+    draw(c) {
+        // Japanese Twilight Sky
+        const skyGrad = c.createLinearGradient(0, 0, 0, V_HEIGHT);
+        skyGrad.addColorStop(0, '#09010e');
+        skyGrad.addColorStop(0.5, '#2e0717');
+        skyGrad.addColorStop(0.85, '#5c0f1e');
+        skyGrad.addColorStop(1, '#0c0205');
+        c.fillStyle = skyGrad;
+        c.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+        // Giant Blood Moon
+        c.save();
+        c.beginPath();
+        c.arc(V_WIDTH * 0.5, 360, 220, 0, Math.PI * 2);
+        c.fillStyle = '#dc2626';
+        c.shadowColor = '#ef4444';
+        c.shadowBlur = 120;
+        c.fill();
+        // Moon Craters
+        c.fillStyle = 'rgba(0,0,0,0.22)';
+        c.beginPath(); c.arc(V_WIDTH * 0.5 - 50, 320, 45, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(V_WIDTH * 0.5 + 70, 390, 70, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(V_WIDTH * 0.5 - 20, 440, 35, 0, Math.PI * 2); c.fill();
+        c.restore();
+
+        // Distant Silhouette Mountains
+        c.fillStyle = '#060104';
+        c.beginPath();
+        c.moveTo(0, GROUND_Y);
+        c.lineTo(0, 520);
+        c.lineTo(380, 420);
+        c.lineTo(750, 620);
+        c.lineTo(1200, 380);
+        c.lineTo(1650, 560);
+        c.lineTo(V_WIDTH, 460);
+        c.lineTo(V_WIDTH, GROUND_Y);
+        c.closePath();
+        c.fill();
+
+        // Pagoda and Torii Gate
+        this.drawPagoda(c, 280, GROUND_Y, 2.6);
+        this.drawTorii(c, 1620, GROUND_Y, 2.4);
+
+        // Hanging Paper Lanterns on Torii
+        this.drawLantern(c, 1540, GROUND_Y - 210);
+        this.drawLantern(c, 1700, GROUND_Y - 210);
+
+        // Fog Layers
+        this.mistClouds.forEach(m => {
+            c.fillStyle = `rgba(255, 100, 130, ${m.alpha})`;
+            c.beginPath();
+            c.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+            c.fill();
+        });
+
+        // Battlefield Ground Platform
+        c.fillStyle = '#030104';
+        c.fillRect(0, GROUND_Y, V_WIDTH, V_HEIGHT - GROUND_Y);
+        // Neon edge line
+        const edgeGrad = c.createLinearGradient(0, 0, V_WIDTH, 0);
+        edgeGrad.addColorStop(0, '#06b6d4');
+        edgeGrad.addColorStop(0.5, '#a855f7');
+        edgeGrad.addColorStop(1, '#ef4444');
+        c.fillStyle = edgeGrad;
+        c.fillRect(0, GROUND_Y, V_WIDTH, 10);
+    }
+}
+
+class Fighter {
+    constructor({ x, facing, name, primaryColor, isPlayer1 }) {
+        this.initialX = x;
+        this.initialFacing = facing;
+        this.name = name;
+        this.primaryColor = primaryColor;
+        this.isPlayer1 = isPlayer1;
+        this.reset();
+    }
+
+    reset() {
+        this.x = this.initialX;
+        this.y = GROUND_Y - 170;
+        this.width = 75;
+        this.height = 175;
+        this.vx = 0;
+        this.vy = 0;
+        this.facing = this.initialFacing;
+        
+        this.hp = 100;
+        this.sp = 0;
+        this.combo = 0;
+        this.comboTimer = 0;
+
+        this.isAttacking = false;
+        this.attackCooldown = false;
+        this.isBlocking = false;
+        this.isDashing = false;
+        this.dashTimer = 0;
+        this.hitStun = 0;
+        this.dead = false;
+
+        this.frame = 0;
+        this.shadowTrails = [];
+        this.attackHitbox = { x: 0, y: 0, w: 220, h: 90 };
+    }
+
+    update() {
+        if (this.dead) {
+            this.height = 45;
+            this.y = GROUND_Y - this.height;
+            return;
+        }
+
+        this.frame++;
+
+        // SP Passive Charge
+        if (this.sp < 100) {
+            this.sp = Math.min(100, this.sp + 0.16);
+        }
+
+        // Combo timeout decay
+        if (this.combo > 0) {
+            this.comboTimer--;
+            if (this.comboTimer <= 0) {
+                this.combo = 0;
+                this.updateComboUI();
+            }
+        }
+
+        // Hitstun handling
+        if (this.hitStun > 0) {
+            this.hitStun--;
+            this.isAttacking = false;
+        }
+
+        // Physics movement
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Gravity check
+        if (this.y + this.height + this.vy >= GROUND_Y) {
+            this.vy = 0;
+            this.y = GROUND_Y - this.height;
+        } else {
+            this.vy += GRAVITY;
+        }
+
+        // Boundaries
+        if (this.x < 30) this.x = 30;
+        if (this.x + this.width > V_WIDTH - 30) this.x = V_WIDTH - 30 - this.width;
+
+        // Attack box positioning
+        if (this.facing === 'right') {
+            this.attackHitbox.x = this.x + this.width * 0.4;
+        } else {
+            this.attackHitbox.x = this.x + this.width * 0.6 - this.attackHitbox.w;
+        }
+        this.attackHitbox.y = this.y + 25;
+
+        // Dash trail cloning
+        if (this.isDashing || Math.abs(this.vx) > 16) {
+            this.shadowTrails.push({ x: this.x, y: this.y, alpha: 0.8, facing: this.facing });
+        }
+        for (let i = this.shadowTrails.length - 1; i >= 0; i--) {
+            this.shadowTrails[i].alpha -= 0.08;
+            if (this.shadowTrails[i].alpha <= 0) {
+                this.shadowTrails.splice(i, 1);
+            }
+        }
+    }
+
+    attack() {
+        if (this.attackCooldown || this.isDashing || this.hitStun > 0 || this.dead) return;
+        this.isAttacking = true;
+        this.attackCooldown = true;
+        sfx.playSlash();
+
+        // Forward attack step
+        if (this.vy === 0) {
+            this.vx = (this.facing === 'right' ? 14 : -14);
+        }
+
+        setTimeout(() => { this.isAttacking = false; }, 140);
+        const cd = (this.name === 'NAMAN') ? 480 : 320;
+        setTimeout(() => { this.attackCooldown = false; }, cd);
+    }
+
+    specialAttack() {
+        if (this.sp < 100 || this.isDashing || this.dead) return;
+        this.sp = 0;
+        this.isAttacking = true;
+        this.attackCooldown = true;
+
+        const moveName = (this.name === 'NAMAN') ? 'TENCHI SLASH' : 'SHADOW ROAR';
+        triggerAnimeCutIn(this, moveName);
+
+        const spawnX = (this.facing === 'right') ? this.x + this.width + 20 : this.x - 170;
+        const waveType = (this.name === 'NAMAN') ? 'crescent' : 'spiral';
+        const waveVx = (this.facing === 'right') ? 30 : -30;
+
+        setTimeout(() => {
+            projectiles.push(new EnergyProjectile(spawnX, this.y + 40, waveVx, this.primaryColor, this, waveType));
+            this.isAttacking = false;
+            this.attackCooldown = false;
+        }, 220);
+    }
+
+    dash() {
+        if (this.isDashing || this.hitStun > 0 || this.dead) return;
+        this.isDashing = true;
+        sfx.playDash();
+        this.vx = (this.facing === 'right' ? 38 : -38);
+        this.vy = 0;
+        setTimeout(() => {
+            this.isDashing = false;
+            this.vx = 0;
+        }, 180);
+    }
+
+    takeDamage(dmg, knockback, attacker, isSpecial = false) {
+        if (this.dead) return false;
+        if (this.isDashing) return false; // Invincible during active dash dodge
+
+        if (this.isBlocking) {
+            dmg = Math.floor(dmg * 0.2); // 80% damage reduction on block
+            sfx.playTone(450, 'square', 0.08, 0.2);
+            mangaTexts.push(new MangaFloatText(this.x + this.width/2, this.y + 40, 'GUARD!', '#38bdf8', 0.8));
+        } else {
+            sfx.playHit();
+            this.hitStun = isSpecial ? 18 : 10;
+        }
+
+        this.hp = Math.max(0, this.hp - dmg);
+        this.vx = knockback.x * (this.isBlocking ? 0.3 : 1);
+        this.vy = knockback.y * (this.isBlocking ? 0.3 : 1);
+
+        attacker.combo++;
+        attacker.comboTimer = 160;
+        attacker.updateComboUI();
+
+        if (this.hp <= 0) {
+            this.dead = true;
+            this.vx = 0;
+            this.vy = -14;
+            sfx.playVictory();
+            triggerCameraPunch(1.35, 600);
+            triggerScreenShake(30, 30);
+        }
+
+        return true;
+    }
+
+    updateComboUI() {
+        const prefix = this.isPlayer1 ? 'p1' : 'p2';
+        const box = document.getElementById(`${prefix}-combo-box`);
+        const count = document.getElementById(`${prefix}-combo-count`);
+        if (this.combo >= 2) {
+            count.innerText = this.combo;
+            box.classList.add('show');
+        } else {
+            box.classList.remove('show');
+        }
+    }
+
+    drawSilhouette(c, drawX, drawY, alpha = 1, facing = this.facing) {
+        c.save();
+        c.translate(drawX + this.width / 2, drawY + this.height / 2);
+        if (facing === 'left') c.scale(-1, 1);
+        c.globalAlpha = alpha;
+
+        const isMoving = Math.abs(this.vx) > 0 && this.vy === 0;
+        const isJumping = this.vy !== 0;
+
+        let legFront = 0, legBack = 0, bodyTilt = 0;
+        if (this.name === 'SHIVAM') {
+            bodyTilt = isMoving ? 0.6 : 0.28; // Beast ninja forward crouch
+        } else {
+            bodyTilt = isMoving ? 0.25 : 0.02; // Samurai upright stance
+        }
+
+        if (this.isBlocking) {
+            bodyTilt = -0.2;
+            legFront = -0.4; legBack = 0.5;
+        } else if (this.isDashing) {
+            bodyTilt += 0.5;
+            legFront = -0.7; legBack = 0.9;
+        } else if (isMoving) {
+            legFront = Math.sin(this.frame * 0.45) * 1.1;
+            legBack = Math.sin(this.frame * 0.45 + Math.PI) * 1.1;
+        } else if (isJumping) {
+            legFront = -0.7; legBack = 0.5;
+        }
+
+        c.shadowColor = this.primaryColor;
+        c.shadowBlur = (alpha === 1) ? 28 : 0;
+        c.fillStyle = '#060205';
+        c.strokeStyle = '#060205';
+        c.lineCap = 'round';
+        c.lineJoin = 'round';
+
+        // 1. Back Leg (Hakama Wide Trousers)
+        c.save();
+        c.translate(0, 20);
+        c.rotate(legBack);
+        c.beginPath();
+        c.moveTo(0, 0); c.lineTo(-24, 72); c.lineTo(18, 72); c.lineTo(12, 0);
+        c.closePath(); c.fill();
+        c.restore();
+
+        // 2. Torso with Robe & Kimono
+        c.save();
+        c.rotate(bodyTilt);
+        c.beginPath();
+        c.moveTo(-25, -65); c.lineTo(25, -65);
+        c.lineTo(36, 32); c.lineTo(-32, 32);
+        c.closePath(); c.fill();
+
+        // Sash (Obi) with Signature Color Glow
+        c.fillStyle = this.primaryColor;
+        c.globalAlpha = alpha * 0.95;
+        c.fillRect(-34, 0, 70, 16);
+        c.globalAlpha = alpha;
+        c.fillStyle = '#060205';
+
+        // 3. Head & Distinct Hair / Gorilla Cap
+        c.beginPath();
+        c.arc(10, -92, 22, 0, Math.PI * 2);
+        c.fill();
+
+        // Glowing Anime Eyes
+        c.fillStyle = '#ffffff';
+        c.shadowColor = this.primaryColor;
+        c.shadowBlur = 20;
+        c.beginPath();
+        c.moveTo(14, -96); c.lineTo(28, -99); c.lineTo(23, -93);
+        c.closePath(); c.fill();
+        c.fillStyle = '#060205';
+        c.shadowBlur = (alpha === 1) ? 28 : 0;
+
+        if (this.name === 'SHIVAM') {
+            // SHIVAM: Gorilla Cap + Cap Visor + Rounded Gorilla Ears
+            c.fillStyle = '#171115';
+            c.beginPath();
+            c.arc(10, -96, 23, Math.PI, 0);
+            c.lineTo(38, -94); c.lineTo(20, -85); c.lineTo(10, -96);
+            c.fill();
+            // Gorilla Ears
+            c.beginPath(); c.arc(-10, -94, 9, 0, Math.PI * 2); c.fill();
+            c.beginPath(); c.arc(10, -114, 9, 0, Math.PI * 2); c.fill();
+            // Dynamic Ninja Scarf Tassels
+            c.strokeStyle = this.primaryColor;
+            c.lineWidth = 6;
+            const scarfWave = Math.sin(this.frame * 0.3) * 12;
+            c.beginPath();
+            c.moveTo(-10, -78);
+            c.quadraticCurveTo(-45, -85 + scarfWave, -80, -70 + scarfWave * 1.5);
+            c.stroke();
+        } else {
+            // NAMAN: Colossal Anime Spiky Hair
+            c.fillStyle = this.primaryColor;
+            c.beginPath();
+            c.moveTo(25, -96);
+            c.lineTo(46, -125); c.lineTo(16, -114);
+            c.lineTo(26, -162); c.lineTo(-8, -125);
+            c.lineTo(-32, -170); c.lineTo(-24, -118);
+            c.lineTo(-58, -135); c.lineTo(-25, -92);
+            c.closePath();
+            c.fill();
+            c.fillStyle = '#060205';
+        }
+        c.restore(); // end torso
+
+        // 4. Front Leg
+        c.save();
+        c.translate(0, 20);
+        c.rotate(legFront);
+        c.beginPath();
+        c.moveTo(0, 0); c.lineTo(-20, 72); c.lineTo(26, 72); c.lineTo(14, 0);
+        c.closePath(); c.fill();
+        c.restore();
+
+        // 5. Arms & Giant Weapons
+        c.save();
+        c.translate(0, -50);
+        if (this.isBlocking) {
+            c.rotate(-0.8);
+            c.lineWidth = 14;
+            c.beginPath(); c.moveTo(0, 0); c.lineTo(20, 40); c.stroke();
+            // Guard Shield Spark
+            c.strokeStyle = this.primaryColor;
+            c.lineWidth = 6;
+            c.beginPath(); c.arc(30, 30, 45, -Math.PI * 0.4, Math.PI * 0.4); c.stroke();
+        } else if (this.isAttacking) {
+            c.rotate(Math.PI * 0.55);
+            c.lineWidth = 12;
+            c.beginPath(); c.moveTo(0, 0); c.lineTo(0, 55); c.stroke();
+
+            if (this.name === 'NAMAN') {
+                // Buster Blade Slash Arc
+                c.fillStyle = '#222';
+                c.strokeStyle = '#ffffff';
+                c.lineWidth = 4;
+                c.beginPath();
+                c.moveTo(-22, 50); c.lineTo(25, 50);
+                c.lineTo(38, 270); c.lineTo(0, 310); c.lineTo(-20, 270);
+                c.closePath(); c.fill(); c.stroke();
+
+                // Blazing Cyan Energy Blade Trail
+                c.restore();
+                c.save();
+                c.translate(0, -25);
+                c.beginPath();
+                c.arc(0, 0, 240, -Math.PI * 0.5, Math.PI * 0.55, false);
+                c.strokeStyle = this.primaryColor;
+                c.lineWidth = 55;
+                c.globalAlpha = alpha * 0.75;
+                c.stroke();
+                c.strokeStyle = '#ffffff';
+                c.lineWidth = 10;
+                c.stroke();
+            } else {
+                // Shivam Dual Katana Cross Arc
+                c.strokeStyle = '#ffffff';
+                c.lineWidth = 7;
+                c.beginPath(); c.moveTo(0, 40); c.lineTo(0, 200); c.stroke();
+                c.beginPath(); c.moveTo(10, 40); c.lineTo(70, 190); c.stroke();
+
+                // Crimson Slash Blast Arc
+                c.restore();
+                c.save();
+                c.translate(0, -20);
+                c.beginPath();
+                c.arc(0, 0, 200, -Math.PI * 0.35, Math.PI * 0.45, false);
+                c.strokeStyle = this.primaryColor;
+                c.lineWidth = 32;
+                c.globalAlpha = alpha * 0.85;
+                c.stroke();
+            }
+        } else {
+            // Idle weapon holding
+            const armAngle = isMoving ? Math.sin(this.frame * 0.45 + Math.PI) * 0.6 : 0.3;
+            c.rotate(armAngle);
+            c.lineWidth = 12;
+            c.beginPath(); c.moveTo(0, 0); c.lineTo(0, 45); c.stroke();
+
+            if (this.name === 'NAMAN') {
+                c.fillStyle = '#1c1c24';
+                c.strokeStyle = '#475569';
+                c.lineWidth = 3;
+                c.beginPath();
+                c.moveTo(-20, 45); c.lineTo(24, 45);
+                c.lineTo(15, 250); c.lineTo(-30, 220);
+                c.closePath(); c.fill(); c.stroke();
+            } else {
+                c.strokeStyle = '#e2e8f0';
+                c.lineWidth = 6;
+                c.beginPath(); c.moveTo(0, 45); c.lineTo(-50, 175); c.stroke();
+            }
+        }
+        c.restore();
+
+        c.restore();
+    }
+
+    draw(c) {
+        if (this.dead && this.height === 45) {
+            // Knocked out silhouette on ground
+            c.save();
+            c.fillStyle = '#060205';
+            c.shadowColor = this.primaryColor;
+            c.shadowBlur = 10;
+            c.fillRect(this.x, GROUND_Y - 35, 170, 35);
+            c.restore();
+            return;
+        }
+
+        // Draw shadow clone trails
+        this.shadowTrails.forEach(t => {
+            this.drawSilhouette(c, t.x, t.y, t.alpha * 0.4, t.facing);
+        });
+
+        // Draw active character model
+        this.drawSilhouette(c, this.x, this.y, 1, this.facing);
+    }
+}
+
+const bg = new GameBackground();
+const sakuraPetals = Array.from({ length: 90 }, () => new SakuraPetal(true));
+let combatParticles = [];
+let mangaTexts = [];
+let auraFlames = [];
+let projectiles = [];
+
+const player1 = new Fighter({
+    x: 320,
+    facing: 'right',
+    name: 'NAMAN',
+    primaryColor: '#06b6d4',
+    isPlayer1: true
+});
+
+const player2 = new Fighter({
+    x: 1520,
+    facing: 'left',
+    name: 'SHIVAM',
+    primaryColor: '#ef4444',
+    isPlayer1: false
+});
+
+// Key Inputs Track
+const keys = {
+    a: false, d: false, w: false, s: false,
+    ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false
+};
+
+window.addEventListener('keydown', (e) => {
+    sfx.init();
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+        e.preventDefault();
+    }
+
+    // Global instant restart shortcuts
+    if (e.key === 'r' || e.key === 'R') {
+        restartMatch();
+        return;
+    }
+    if (e.code === 'Space' && gameOver) {
+        restartMatch();
+        return;
+    }
+
+    if (gameOver || hitStopCounter > 0) return;
+
+    // Player 1 (Naman) Controls
+    if (!player1.dead) {
+        switch (e.key.toLowerCase()) {
+            case 'a': keys.a = true; player1.facing = 'left'; break;
+            case 'd': keys.d = true; player1.facing = 'right'; break;
+            case 'w':
+                if (player1.vy === 0) { player1.vy = -27; sfx.playTone(280, 'sine', 0.1, 0.2); }
+                break;
+            case 's': player1.isBlocking = true; break;
+            case 'shift': player1.dash(); break;
+            case 'f': player1.attack(); break;
+            case 'g': player1.specialAttack(); break;
+        }
+    }
+
+    // Player 2 (Shivam) Controls
+    if (!player2.dead) {
+        switch (e.key) {
+            case 'ArrowLeft': keys.ArrowLeft = true; player2.facing = 'left'; break;
+            case 'ArrowRight': keys.ArrowRight = true; player2.facing = 'right'; break;
+            case 'ArrowUp':
+                if (player2.vy === 0) { player2.vy = -27; sfx.playTone(320, 'sine', 0.1, 0.2); }
+                break;
+            case 'ArrowDown': player2.isBlocking = true; break;
+            case '0': case 'm': case 'M': player2.dash(); break;
+            case 'l': case 'L': player2.attack(); break;
+            case 'k': case 'K': player2.specialAttack(); break;
+        }
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    switch (e.key.toLowerCase()) {
+        case 'a': keys.a = false; break;
+        case 'd': keys.d = false; break;
+        case 's': player1.isBlocking = false; break;
+    }
+    switch (e.key) {
+        case 'ArrowLeft': keys.ArrowLeft = false; break;
+        case 'ArrowRight': keys.ArrowRight = false; break;
+        case 'ArrowDown': player2.isBlocking = false; break;
+    }
+});
+
+function checkHitboxOverlap(box1, f2) {
+    return (
+        box1.x + box1.w >= f2.x &&
+        box1.x <= f2.x + f2.width &&
+        box1.y + box1.h >= f2.y &&
+        box1.y <= f2.y + f2.height
+    );
+}
+
+function spawnImpactClash(x, y, color, dmg, isSpecial = false) {
+    for (let i = 0; i < (isSpecial ? 40 : 22); i++) {
+        combatParticles.push(new CombatParticle(x, y, color, 'spark'));
+    }
+    for (let i = 0; i < (isSpecial ? 8 : 4); i++) {
+        combatParticles.push(new CombatParticle(x, y, '#ffffff', 'slash'));
+    }
+
+    // Manga onomatopoeia library
+    const heavyWords = ['DODON!', 'KABOOM!', 'BAAAM!', 'CRUSH!'];
+    const lightWords = ['SLASH!', 'ZASH!', 'BAM!', 'CLASH!'];
+    const chosen = isSpecial ? heavyWords[Math.floor(Math.random() * heavyWords.length)] : lightWords[Math.floor(Math.random() * lightWords.length)];
+    mangaTexts.push(new MangaFloatText(x, y - 50, chosen, color, isSpecial ? 1.4 : 1.0));
+}
+
+// Timer and Match Logic
+let matchTimer = 99;
+let timerInterval = null;
+let gameOver = false;
+
+function startMatchTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    matchTimer = 99;
+    document.getElementById('timer-text').innerText = matchTimer;
+    timerInterval = setInterval(() => {
+        if (!gameOver && hitStopCounter === 0) {
+            matchTimer--;
+            document.getElementById('timer-text').innerText = matchTimer;
+            if (matchTimer <= 0) {
+                endGameByTime();
+            }
+        }
+    }, 1000);
+}
+
+function endGame(winner) {
+    gameOver = true;
+    clearInterval(timerInterval);
+    const modal = document.getElementById('gameover-modal');
+    const title = document.getElementById('winner-title');
+    const sub = document.getElementById('winner-sub');
+
+    modal.classList.add('visible');
+
+    if (winner === 'draw') {
+        title.innerText = 'STALEMATE!';
+        title.className = "text-6xl font-black mb-4 font-['Cinzel'] tracking-widest text-slate-300";
+        sub.innerText = 'Both warriors fought to equal exhaustion!';
+    } else if (winner === player1) {
+        title.innerText = 'NAMAN WINS!';
+        title.className = "text-6xl font-black mb-4 font-['Cinzel'] tracking-widest text-cyan-400 drop-shadow-[0_0_25px_#06b6d4]";
+        sub.innerText = 'The Buster Blade cleaved destiny in two!';
+    } else {
+        title.innerText = 'SHIVAM WINS!';
+        title.className = "text-6xl font-black mb-4 font-['Cinzel'] tracking-widest text-rose-500 drop-shadow-[0_0_25px_#ef4444]";
+        sub.innerText = 'The Gorilla Beast Katana style reigns supreme!';
+    }
+}
+
+function endGameByTime() {
+    if (player1.hp === player2.hp) endGame('draw');
+    else if (player1.hp > player2.hp) endGame(player1);
+    else endGame(player2);
+}
+
+function restartMatch() {
+    sfx.init();
+    sfx.playTone(520, 'sine', 0.2, 0.3);
+
+    // Reset entities & lists
+    player1.reset();
+    player2.reset();
+    projectiles = [];
+    combatParticles = [];
+    mangaTexts = [];
+    auraFlames = [];
+    hitStopCounter = 0;
+    impactFlashTimer = 0;
+    cutInState.active = false;
+    camera.zoom = 1;
+    camera.targetZoom = 1;
+    gameOver = false;
+
+    // Reset UI
+    document.getElementById('gameover-modal').classList.remove('visible');
+    document.getElementById('p1-combo-box').classList.remove('show');
+    document.getElementById('p2-combo-box').classList.remove('show');
+    document.getElementById('p1-sp').classList.remove('meter-glow-p1');
+    document.getElementById('p2-sp').classList.remove('meter-glow-p2');
+
+    updateHUD();
+    startMatchTimer();
+}
+
+// Hook Restart Buttons
+document.getElementById('btn-restart-hud').addEventListener('click', restartMatch);
+document.getElementById('btn-modal-restart').addEventListener('click', restartMatch);
+document.getElementById('btn-mute').addEventListener('click', (e) => {
+    const isMuted = sfx.toggleMute();
+    e.currentTarget.innerText = isMuted ? '🔇' : '🔊';
+});
+
+function updateHUD() {
+    // Health Bars & Ghost Trails
+    document.getElementById('p1-hp').style.width = `${player1.hp}%`;
+    document.getElementById('p2-hp').style.width = `${player2.hp}%`;
+    document.getElementById('p1-hp-trail').style.width = `${player1.hp}%`;
+    document.getElementById('p2-hp-trail').style.width = `${player2.hp}%`;
+
+    // Special Energy Bars
+    const p1SpElem = document.getElementById('p1-sp');
+    const p2SpElem = document.getElementById('p2-sp');
+    p1SpElem.style.width = `${player1.sp}%`;
+    p2SpElem.style.width = `${player2.sp}%`;
+
+    if (player1.sp >= 100) p1SpElem.classList.add('meter-glow-p1');
+    else p1SpElem.classList.remove('meter-glow-p1');
+
+    if (player2.sp >= 100) p2SpElem.classList.add('meter-glow-p2');
+    else p2SpElem.classList.remove('meter-glow-p2');
+}
+
+function drawRadialSpeedLines(c) {
+    c.save();
+    c.translate(V_WIDTH / 2, V_HEIGHT / 2);
+    c.beginPath();
+    for (let i = 0; i < 90; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const inner = Math.random() * 260 + 180;
+        const outer = V_WIDTH * 1.1;
+        c.moveTo(Math.cos(theta) * inner, Math.sin(theta) * inner);
+        c.lineTo(Math.cos(theta) * outer, Math.sin(theta) * outer);
+    }
+    c.lineWidth = 3;
+    c.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    c.stroke();
+    c.restore();
+}
+
+function drawAnimeCutInBanner(c) {
+    if (!cutInState.active) return;
+    
+    const bannerH = 340;
+    const bannerY = (V_HEIGHT - bannerH) / 2;
+    const progress = 1 - (cutInState.timer / cutInState.maxTimer);
+
+    c.save();
+    // Dark Backdrop
+    c.fillStyle = 'rgba(2, 0, 8, 0.88)';
+    c.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+    // Slide-in speed interpolation
+    const slideOffset = (1 - Math.pow(progress, 0.25)) * V_WIDTH * (cutInState.facingRight ? -1 : 1);
+    c.translate(slideOffset, 0);
+
+    // Dynamic Colored Border Strip
+    c.fillStyle = '#06010a';
+    c.fillRect(0, bannerY, V_WIDTH, bannerH);
+    c.lineWidth = 10;
+    c.strokeStyle = cutInState.color;
+    c.strokeRect(0, bannerY, V_WIDTH, bannerH);
+
+    // Speed streaks across banner
+    c.beginPath();
+    for (let i = 0; i < 40; i++) {
+        const y = bannerY + Math.random() * bannerH;
+        const len = Math.random() * 500 + 200;
+        const x = Math.random() * V_WIDTH;
+        c.moveTo(x, y); c.lineTo(x + len, y);
+    }
+    c.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    c.lineWidth = 4;
+    c.stroke();
+
+    // Dramatic Glowing Eyes
+    const eyeCenterX = cutInState.facingRight ? V_WIDTH * 0.65 : V_WIDTH * 0.35;
+    c.save();
+    c.translate(eyeCenterX, V_HEIGHT / 2);
+    if (!cutInState.facingRight) c.scale(-1, 1);
+
+    c.shadowColor = cutInState.color;
+    c.shadowBlur = 50;
+    c.fillStyle = '#ffffff';
+    // Angled Anime Eye Sockets
+    c.beginPath();
+    c.moveTo(-160, 20); c.lineTo(40, -40); c.lineTo(160, -10); c.lineTo(40, 30);
+    c.closePath(); c.fill();
+
+    // Iris / Pupil
+    c.fillStyle = cutInState.color;
+    c.beginPath(); c.arc(20, -5, 18, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff';
+    c.beginPath(); c.arc(26, -10, 6, 0, Math.PI * 2); c.fill();
+    c.restore();
+
+    // Move Title Text
+    c.font = '900 100px "Cinzel", "Impact", sans-serif';
+    c.fillStyle = '#ffffff';
+    c.shadowColor = cutInState.color;
+    c.shadowBlur = 30;
+    c.textAlign = cutInState.facingRight ? 'left' : 'right';
+    const textX = cutInState.facingRight ? 90 : V_WIDTH - 90;
+    c.fillText(cutInState.name, textX, bannerY + 130);
+
+    c.font = '700 48px "Orbitron", sans-serif';
+    c.fillStyle = cutInState.color;
+    c.shadowBlur = 15;
+    c.fillText(cutInState.title, textX, bannerY + 220);
+
+    c.restore();
+
+    cutInState.timer--;
+    if (cutInState.timer <= 0) {
+        cutInState.active = false;
+    }
+}
+
+function gameLoop() {
+    window.requestAnimationFrame(gameLoop);
+
+    // Smooth Camera Lerp
+    camera.zoom += (camera.targetZoom - camera.zoom) * 0.12;
+
+    if (hitStopCounter > 0 && !cutInState.active) {
+        hitStopCounter--;
+    }
+
+    ctx.save();
+    
+    // Virtual Master Scaling
+    ctx.scale(masterScale, masterScale);
+    const scaledW = V_WIDTH * masterScale;
+    const offsetX = (canvas.width - scaledW) / 2 / masterScale;
+    if (offsetX > 0) ctx.translate(offsetX, 0);
+
+    // Camera Zoom & Shake
+    ctx.translate(V_WIDTH / 2, V_HEIGHT / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-V_WIDTH / 2, -V_HEIGHT / 2);
+
+    if (camera.shakeDuration > 0) {
+        const sx = (Math.random() - 0.5) * camera.shakeMagnitude;
+        const sy = (Math.random() - 0.5) * camera.shakeMagnitude;
+        ctx.translate(sx, sy);
+        camera.shakeDuration--;
+    }
+
+    // Impact Frame Inversion
+    if (impactFlashTimer > 0) {
+        ctx.fillStyle = (impactFlashTimer % 2 === 0) ? '#ffffff' : '#030008';
+        ctx.fillRect(-600, -600, V_WIDTH + 1200, V_HEIGHT + 1200);
+        impactFlashTimer--;
+        ctx.restore();
+        return;
+    }
+
+    // 1. Draw Environmental Background
+    bg.update();
+    bg.draw(ctx);
+
+    // 2. Dash Speed Lines
+    if (player1.isDashing || player2.isDashing) {
+        drawRadialSpeedLines(ctx);
+    }
+
+    // 3. Falling Sakura Petals
+    const windBlow = (player1.isAttacking || player2.isAttacking) ? 6 : 0;
+    sakuraPetals.forEach(p => {
+        p.update(windBlow);
+        p.draw(ctx);
+    });
+
+    // 4. Energy Auras (Triggered when SP is 100%)
+    if (player1.sp >= 100 && !player1.dead) {
+        auraFlames.push(new AuraFlame(player1.x + player1.width / 2, player1.y + player1.height - 20, player1.primaryColor));
+    }
+    if (player2.sp >= 100 && !player2.dead) {
+        auraFlames.push(new AuraFlame(player2.x + player2.width / 2, player2.y + player2.height - 20, player2.primaryColor));
+    }
+
+    // Particle updates
+    [auraFlames, combatParticles, mangaTexts].forEach(list => {
+        for (let i = list.length - 1; i >= 0; i--) {
+            list[i].update();
+            list[i].draw(ctx);
+            if (list[i].alpha <= 0) list.splice(i, 1);
+        }
+    });
+
+    // 5. Update & Draw Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const proj = projectiles[i];
+        if (hitStopCounter === 0 && !cutInState.active) proj.update();
+        proj.draw(ctx);
+
+        if (!proj.active) {
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        // Projectile Collisions
+        if (proj.owner === player1 && checkHitboxOverlap({ x: proj.x - 40, y: proj.y - 40, w: 120, h: 80 }, player2)) {
+            proj.active = false;
+            player2.takeDamage(28, { x: proj.vx > 0 ? 32 : -32, y: -14 }, player1, true);
+            spawnImpactClash(player2.x + player2.width / 2, player2.y + 60, player1.primaryColor, 28, true);
+            triggerHitStop(14);
+            triggerScreenShake(26, 18);
+            triggerCameraPunch(1.28, 350);
+            impactFlashTimer = 5;
+        } else if (proj.owner === player2 && checkHitboxOverlap({ x: proj.x - 40, y: proj.y - 40, w: 120, h: 80 }, player1)) {
+            proj.active = false;
+            player1.takeDamage(28, { x: proj.vx > 0 ? 32 : -32, y: -14 }, player2, true);
+            spawnImpactClash(player1.x + player1.width / 2, player1.y + 60, player2.primaryColor, 28, true);
+            triggerHitStop(14);
+            triggerScreenShake(26, 18);
+            triggerCameraPunch(1.28, 350);
+            impactFlashTimer = 5;
+        }
+    }
+
+    // 6. Update Fighters Physics
+    if (hitStopCounter === 0 && !cutInState.active) {
+        // Player 1 Movement
+        if (!player1.dead && !player1.isDashing && player1.hitStun === 0) {
+            player1.vx = 0;
+            if (keys.a) player1.vx = -10;
+            else if (keys.d) player1.vx = 10;
+        }
+        // Player 2 Movement
+        if (!player2.dead && !player2.isDashing && player2.hitStun === 0) {
+            player2.vx = 0;
+            if (keys.ArrowLeft) player2.vx = -12;
+            else if (keys.ArrowRight) player2.vx = 12;
+        }
+
+        player1.update();
+        player2.update();
+
+        // Melee Attack Collisions
+        if (player1.isAttacking && checkHitboxOverlap(player1.attackHitbox, player2)) {
+            player1.isAttacking = false;
+            const isHeavy = (player1.combo >= 2);
+            const dmg = isHeavy ? 18 : 12;
+            if (player2.takeDamage(dmg, { x: player1.facing === 'right' ? 24 : -24, y: -9 }, player1)) {
+                spawnImpactClash(player2.x + player2.width / 2, player2.y + 70, player1.primaryColor, dmg, isHeavy);
+                triggerHitStop(isHeavy ? 10 : 5);
+                triggerScreenShake(isHeavy ? 20 : 10, 10);
+                if (isHeavy) triggerCameraPunch(1.2, 220);
+            }
+        }
+
+        if (player2.isAttacking && checkHitboxOverlap(player2.attackHitbox, player1)) {
+            player2.isAttacking = false;
+            const isHeavy = (player2.combo >= 2);
+            const dmg = isHeavy ? 16 : 11;
+            if (player1.takeDamage(dmg, { x: player2.facing === 'right' ? 22 : -22, y: -9 }, player2)) {
+                spawnImpactClash(player1.x + player1.width / 2, player1.y + 70, player2.primaryColor, dmg, isHeavy);
+                triggerHitStop(isHeavy ? 10 : 5);
+                triggerScreenShake(isHeavy ? 20 : 10, 10);
+                if (isHeavy) triggerCameraPunch(1.2, 220);
+            }
+        }
+
+        // Check Victory KO
+        if (!gameOver) {
+            if (player1.dead && player2.dead) endGame('draw');
+            else if (player1.dead) endGame(player2);
+            else if (player2.dead) endGame(player1);
+        }
+    }
+
+    // 7. Draw Fighters
+    player1.draw(ctx);
+    player2.draw(ctx);
+
+    ctx.restore();
+
+    // 8. Anime Cut-In Fullscreen Overlay
+    if (cutInState.active) {
+        ctx.save();
+        ctx.scale(masterScale, masterScale);
+        if (offsetX > 0) ctx.translate(offsetX, 0);
+        drawAnimeCutInBanner(ctx);
+        ctx.restore();
+    }
+
+    // Update Top Status HUD
+    updateHUD();
+}
+
+// Start Game
+startMatchTimer();
+gameLoop();
+</script>
+</body>
+</html>
